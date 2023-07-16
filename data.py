@@ -3,6 +3,21 @@ import tensorflow as tf
 import pickle
 import re
 import os
+from tqdm import tqdm
+import string
+
+
+def get_allowed_chars():
+    print('Getting Valid Characters...')
+    allowed_chars = [char for char in tqdm(string.ascii_letters + string.digits + string.punctuation + ' ' + '\n', desc = 'Getting Valid Characters')]
+    return allowed_chars
+
+def filter_data(data, allowed_chars):
+    filtered_data = []
+    for text in tqdm(data, desc='Filtering Data'):
+        filtered_text = ''.join(c for c in text if c in allowed_chars)
+        filtered_data.append(filtered_text)
+    return filtered_data
 
 def remove_mask_oov_tokens(vocabulary):
     mask_token = ''
@@ -17,9 +32,9 @@ def remove_special_chars(string):
     string = re.sub(r'[\[\]]', '', string)
     return string
 
-def get_vocab(list):
+def get_vocab(data_list):
     words = []
-    for i in list:
+    for i in tqdm(data_list, desc='Getting Vocabulary'):
         words += i.split(' ')
 
     vocab = [*set(words)]
@@ -27,54 +42,28 @@ def get_vocab(list):
 
     return vocab
 
-def train_vectorization_model(vocab):
-    vectorize_layer = tf.keras.layers.TextVectorization(
-        max_tokens=None,
-        standardize='lower_and_strip_punctuation',
-        split='whitespace',
-        ngrams=None,
-        output_mode='int',
-        output_sequence_length=None,
-        pad_to_max_tokens=False,
-        vocabulary=vocab,
-    )
 
-    pickle.dump({'config': vectorize_layer.get_config(),
-                'weights': vectorize_layer.get_weights()}
-                , open('vectorization_layer.pkl', 'wb'))
-
+print('Loading Dataset...')
 #load_dataset("wikipedia", "20220301.en") # this is the huge dataset with over 20G of storage!!
 full_dataset = load_dataset('wikipedia', '20220301.simple') # this one has only 235M of storage - use for fast n easy! 
 
-# https://huggingface.co/datasets/wikipedia
-# https://dumps.wikimedia.org/backup-index.html
-
 dataset = list(full_dataset['train'])
 
-#print(dataset[0]) # -> dictionary of 'id', 'url', 'title', and 'text' - we only need text and possibly title
+full_data = [i['text'] for i in dataset]
 
-data = [i['text'] for i in dataset]
-
+chars = get_allowed_chars()
+print('Filtering Data...')
+data = filter_data(full_data, chars)
+print('Getting Vocabulary...')
 vocab = get_vocab(data)
-print('dun dun dun got vocab')
+vocab_size = len(vocab)
+chars_size = len(chars)
 
+with open('variables.pickle', 'wb') as file:
+    pickle.dump(chars, file)
+    pickle.dump(data, file)
+    pickle.dump(vocab, file)
+    pickle.dump(vocab_size, file)
+    pickle.dump(chars_size, file)
 
-if not os.path.isfile('vectorization_layer.pkl'):
-    train_vectorization_model(vocab)
-
-
-from_disk = pickle.load(open('vectorization_layer.pkl', 'rb'))
-vectorizer = tf.keras.layers.TextVectorization.from_config(from_disk['config'])
-vectorizer.set_weights(from_disk['weights'])
-
-print('dun dun dun vectorized')
-
-# This dataset only has training data provided so let's fix that
-get_split_index = lambda x, list: int(len(list) * x/100)
-
-training_data = dataset[:get_split_index(80, dataset)]
-validation_data = dataset[:get_split_index(10, dataset)]
-testing_data = dataset[:get_split_index(10, dataset)]
-
-#output = vectorizer(dataset[0]['text'])
-#print(output)
+print('Variables saved successfully.')
