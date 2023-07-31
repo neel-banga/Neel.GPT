@@ -1,11 +1,7 @@
 from datasets import load_dataset
-import tensorflow as tf
-import pickle
 import re
-import os
 from tqdm import tqdm
 import string
-
 
 def get_allowed_chars():
     print('Getting Valid Characters...')
@@ -59,11 +55,11 @@ vocab = get_vocab(data)
 vocab_size = len(vocab)
 chars_size = len(chars)
 
-with open('variables.pickle', 'wb') as file:
+'''with open('variables.pickle', 'wb') as file:
     pickle.dump(chars, file)
     pickle.dump(data, file)
     pickle.dump(vocab, file)
     pickle.dump(vocab_size, file)
-    pickle.dump(chars_size, file)
+    pickle.dump(chars_size, file)'''
 
 print('Variables saved successfully.')

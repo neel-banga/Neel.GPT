@@ -1,29 +1,11 @@
 import torch
-import concurrent.futures
 from tqdm import tqdm
-#from data import data, vocab, chars, vocab_size, chars_size
+from data import data, vocab, chars, vocab_size, chars_size
 
-SPLIT_VAL = 10 # Decrease to 1 once you have GPU
+SPLIT_VAL = 20 # Decrease to 1 once you have GPU
 BLOCK_SIZE = 8
 
-
-# Loading variables
-try:
-    import pickle
-
-    with open('variables.pickle', 'rb') as file:
-        chars = pickle.load(file)
-        data = pickle.load(file)
-        vocab = pickle.load(file)
-        vocab_size = pickle.load(file)
-        chars_size = pickle.load(file)
-
-    print('Variables loaded successfully. \n')
-
-except:
-    from data import data, vocab, chars, vocab_size, chars_size
-
-def split_list(lst, num_chunks):
+def split_list(lst, num_chunks = SPLIT_VAL):
     chunk_size = len(lst) // num_chunks
     remainder = len(lst) % num_chunks
     chunks = []
@@ -39,12 +21,11 @@ def split_list(lst, num_chunks):
             index += chunk_size
         chunks.append(chunk)
     
-    return chunks
+    return chunks[0]
 
-
-def encode(sentance):
+def encode(sentence):
     values = []
-    for char in sentance:
+    for char in sentence:
         values.append(chars.index(char))
 
     return values
@@ -56,63 +37,54 @@ def decode(tokens):
     print(values)
     return ''.join(values)
 
-
-'''tokens = encode('hi! there')
-print(tokens)
-translation = decode(tokens)
-print(translation)
-'''
-
-def encode_data(data, split):
-    # Third data to make it easier to work with (can take this step back once I have a gpu)
-    data = split_list(data, split)[0]
+data = split_list(data, SPLIT_VAL)
 
 
-    #encoded_data = [torch.tensor(encode(block)) for block in data]
-    #print(encoded_data.shape())
+print(data[0])
 
-    num_threads = 16
-    executor = concurrent.futures.ThreadPoolExecutor(num_threads)
-    print('Starting to encode')
-    encoded_data = list(tqdm(executor.map(encode, data), desc = 'Encoding'))
-    executor.shutdown()
+string_data = ''.join(data)
 
-    print('Now To Tensor')
+encoded_data = torch.tensor(encode(string_data))
+print(encoded_data.shape)
 
-    encoded_data = [torch.tensor(i) for i in encoded_data]
-    print('Encoded')
+split_line = int(0.9*len(encoded_data))
+train_data = encoded_data[:split_line]
+val_data = encoded_data[split_line:]
 
-    return encoded_data
-
-
-'''encoded_data = encode_data(data, SPLIT_VAL)
-print('ed')
-print(encoded_data)'''
-
-try:
-    with open('data.pickle', 'rb') as file:
-        encoded_data = pickle.load(file)
-        train_data = pickle.load(file)
-        val_data = pickle.load(file)
-
-except:
-    encoded_data = encode_data(data, SPLIT_VAL)
-    split_line = int(0.9*len(encoded_data))
-    train_data = encoded_data[:split_line]
-    val_data = encoded_data[split_line:]
-
-
-    with open('data.pickle', 'wb') as file:
-        pickle.dump(encoded_data, file)
-        pickle.dump(train_data, file)
-        pickle.dump(val_data, file)
-
-block = train_data[0][:BLOCK_SIZE+1]
-targets = train_data[0][1:BLOCK_SIZE+2]
+block = train_data[:BLOCK_SIZE+1]
+targets = train_data[1:BLOCK_SIZE+2]
 
 for i in range(len(block)):
     print(decode(block[:i+1].numpy().tolist()))
     
-
     print(f'Context {block[:i+1]}') # Non inclusive that's why we have +1 because if we do [:0] it'll get all elements UNTIL 0
     print(f'Target {targets[i]}')
+
+torch.manual_seed(123)
+batch_size = 4
+block_size = 8
+
+def get_batch(split):
+    data = train_data if split == 'train' else val_data
+    ix = torch.randint(len(data) - block_size, (batch_size,))
+    x = torch.stack([data[i:i+block_size] for i in ix])
+    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
+    return x, y
+
+print(train_data)
+
+x_batch, y_batch = get_batch('train')
+print('inputs:')
+print(x_batch.shape)
+print(x_batch)
+print('targets:')
+print(y_batch.shape)
+print(y_batch)
+
+print('----')
+
+for b in range(batch_size):
+    for t in range(block_size):
+        context = x_batch[b, :t+1]
+        target = y_batch[b,t]
+        print(f"when input is {context.tolist()} the target: {target}")
